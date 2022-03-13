@@ -1,12 +1,16 @@
 import codecs
+import datetime
 import sqlite3
+import time
 from sqlite3 import Error
 
 import os
+import time
 import random
 import string
 import hashlib
 
+import ykman.device
 from OpenSSL import crypto
 from cryptography.hazmat.primitives import _serialization
 from cryptography.hazmat.primitives.asymmetric.padding import *
@@ -19,12 +23,6 @@ from yubikit.piv import PivSession
 
 def generate(characters=string.ascii_uppercase, length=10):
     return ''.join(random.choice(characters) for _ in range(length))
-
-
-# Connect to a YubiKey over a SmartCardConnection, which is needed for PIV.
-connection, device, info = connect_to_device(
-    connection_types=[SmartCardConnection],  # Possible Connection types to allow
-)
 
 
 def verify_piv(connection):
@@ -87,5 +85,21 @@ def verify_piv(connection):
         return verified, certificate
 
 
-key_valid, certificate = verify_piv(connection)
-print(key_valid)
+handled_serials = set()
+state = None
+oldtime = time.time()
+
+while True:
+    pids, new_state = ykman.device.scan_devices()
+    if time.time() - oldtime > 1:
+        oldtime = time.time()
+        if new_state != state:
+            for device, info in ykman.device.list_all_devices():
+                if info.serial not in handled_serials:
+                    connection, device, info = connect_to_device(
+                        connection_types=[SmartCardConnection],  # Possible Connection types to allow
+                    )
+                    key_valid, usr_cert = verify_piv(connection)
+                    handled_serials.add(info.serial)
+
+

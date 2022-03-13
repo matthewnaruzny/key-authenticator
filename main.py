@@ -2,6 +2,7 @@ import codecs
 import sqlite3
 from sqlite3 import Error
 
+import os
 import random
 import string
 import hashlib
@@ -32,20 +33,21 @@ def verify_piv(connection):
         piv = PivSession(connection)
         # Verify Cert Valid and Not Revoked
         cert = piv.get_certificate(yubikit.piv.SLOT.CARD_AUTH)
-        ccert = cert.public_bytes(_serialization.Encoding.PEM).decode("ASCII")
 
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert.public_bytes(_serialization.Encoding.PEM))
         try:
+
+            # Load trusted certificate chain into store
+
+            certpaths = os.listdir('certs')
             store = crypto.X509Store()
 
-            with open('certs/ca.cert.pem', 'rb') as f:
-                cacert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+            for p in certpaths:
+                fp = ('certs/' + p)
+                with open(fp, 'rb') as f:
+                    ncert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+                    store.add_cert(ncert)
 
-            with open('certs/useraccess-intermediate.cert.pem', 'rb') as f:
-                icacert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
-
-            store.add_cert(cacert)
-            store.add_cert(icacert)
             store_ctx = crypto.X509StoreContext(store, certificate)
             store_ctx.verify_certificate()
             cert_valid = True
@@ -61,21 +63,14 @@ def verify_piv(connection):
         except Exception as e:
             print(e)
             print("Certificate Invalid")
-            cert_valid = False
             verified = False
 
         # Challenge Response
         msg = generate(length=40)
         cstr = msg.encode('ascii')
-        hstr = hashlib.sha512(cstr).digest()
-        # print(cstr)
-        # hstr - Challenge String
 
         signature = piv.sign(yubikit.piv.SLOT.CARD_AUTH, key_type=yubikit.piv.KEY_TYPE.RSA2048, message=cstr,
                              hash_algorithm=yubikit.piv.hashes.SHA512(), padding=PKCS1v15())
-        # print("---")
-        # print(hstr)
-        # print(signature)
 
         # Verify Signature
         try:
@@ -89,7 +84,8 @@ def verify_piv(connection):
         connection.close()
 
         print("----\nVerified: " + str(verified))
-        return verified
+        return verified, certificate
 
 
-verify_piv(connection)
+key_valid, certificate = verify_piv(connection)
+print(key_valid)

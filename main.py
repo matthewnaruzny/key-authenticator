@@ -1,5 +1,4 @@
 import sqlite3
-import time
 from sqlite3 import Error
 
 import os
@@ -22,11 +21,36 @@ def generate(characters=string.ascii_uppercase, length=10):
     return ''.join(random.choice(characters) for _ in range(length))
 
 
+def db_connection(file):
+    conn = None
+    try:
+        conn = sqlite3.connect(file)
+    except Error as e:
+        print(e)
+
+    return conn
+
+
+def db_retrieve_key(conn, cn):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM keys WHERE commonname = ?", (cn,))
+    rows = cur.fetchall()
+    return rows[0]
+
+
+def db_retrieve_user(conn, userid):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE userid = ?", (userid,))
+    rows = cur.fetchall()
+    return rows[0]
+
+
 def verify_piv(connection):
+    print("--------------------------------")
     with connection:  # This closes the connection after the block
         verified = True
         piv = PivSession(connection)
-        # Verify Cert Valid and Not Revoked
+        # Verify Cert Valid
         cert = piv.get_certificate(yubikit.piv.SLOT.CARD_AUTH)
 
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert.public_bytes(_serialization.Encoding.PEM))
@@ -50,10 +74,6 @@ def verify_piv(connection):
                 cert_valid = False
                 print("Expired Certificate")
 
-            if cert_valid:
-                print("Certificate Valid\nCN: " + certificate.get_subject().CN)
-            else:
-                print("Certificate Not Valid")
 
         except Exception as e:
             print(e)
@@ -78,7 +98,23 @@ def verify_piv(connection):
 
         connection.close()
 
-        print("----\nVerified: " + str(verified))
+        if cert_valid == False:
+            verified = False
+
+        print("Verified Certificate: " + str(verified))
+
+        # Retrieve Database Listing
+        conn = db_connection("users.db")
+        dbkey = db_retrieve_key(conn, certificate.get_subject().CN)
+        dbuser = db_retrieve_user(conn, dbkey[1])
+        print('--------------------\nAuthenticated User:\nFull Name: ' + (dbuser[1] + ' ' + dbuser[2]) +
+              '\nCN: ' + dbuser[3])
+
+        revoked = dbkey[2]
+        if revoked == 1:
+            verified = False
+            print("REVOKED")
+
         return verified, certificate
 
 
@@ -97,6 +133,6 @@ while True:
                         connection_types=[SmartCardConnection],  # Possible Connection types to allow
                     )
                     key_valid, usr_cert = verify_piv(connection)
+                    print("---- Valid: " + str(key_valid) + " ----")
                     handled_serials.add(info.serial)
-
-
+                    print("Checking Access...")

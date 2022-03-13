@@ -1,5 +1,3 @@
-import codecs
-import datetime
 import sqlite3
 import time
 from sqlite3 import Error
@@ -8,7 +6,6 @@ import os
 import time
 import random
 import string
-import hashlib
 
 import ykman.device
 from OpenSSL import crypto

@@ -310,6 +310,7 @@ $RECYCLE.BIN/
 /.idea/modules.xml
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/inspectionProfiles/Project_Default.xml
-/ca.cert.pem
+/certs/ca.cert.pem
 /.idea/dataSources.xml
 /.idea/key-authenticator.iml
+/certs/
